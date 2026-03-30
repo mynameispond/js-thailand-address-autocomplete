@@ -26,7 +26,7 @@
       <li>ตั้งค่า default value ด้วย <code>data-jsata-value</code></li>
       <li>สลับภาษาในตอน init ด้วย <code>jsataInit(..., { lang: "..." })</code></li>
       <li>บังคับ render ใหม่ด้วย <code>reinitialize: true</code></li>
-      <li>โหลดภาษา custom จาก slug ไฟล์ เช่น <code>lib/lang/demo.json</code></li>
+      <li>โหลดภาษา custom จาก slug ไฟล์ เช่น <code>lang/demo.json</code></li>
     </ul>
   </div>
 
@@ -61,8 +61,7 @@
 
   <script>
     window.jsataConfig = {
-      autoInit: false,
-      addressUrl: "../../address.json"
+      autoInit: false
     };
   </script>
   <script src="../jsata-standalone.js"></script>

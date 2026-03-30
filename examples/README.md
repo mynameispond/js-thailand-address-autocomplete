@@ -21,4 +21,4 @@
 1. เปิดผ่านเว็บเซิร์ฟเวอร์ (ไม่แนะนำเปิดแบบ `file://` เพราะ `fetch` จะโหลด JSON ไม่ได้)
 2. ตรวจ path ให้ถูก:
    - `../jsata-standalone.js`
-   - `../../address.json`
+3. ตรวจว่ามีไฟล์ `address.json` อยู่ระดับ root ของโปรเจกต์ (ตำแหน่งเดียวกับ `jsata-standalone.js`)

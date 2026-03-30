@@ -7,6 +7,21 @@
 		subdistrict: 'select.jsata-select-subdistrict, .jsata-select-subdistrict select',
 		postalcode: 'select.jsata-select-postalcode, .jsata-select-postalcode select'
 	};
+	var JSATA_FIELD_TYPES = ['province', 'district', 'subdistrict', 'postalcode'];
+	var JSATA_ALL_FIELDS_SELECTOR = JSATA_FIELD_TYPES.map(function (type) {
+		return JSATA_SELECTORS[type];
+	}).join(', ');
+	var JSATA_UNINITIALIZED_SELECTORS = JSATA_FIELD_TYPES.reduce(function (acc, type) {
+		var selector = JSATA_SELECTORS[type] || '';
+		acc[type] = selector.split(',').map(function (part) {
+			return part.trim();
+		}).filter(function (part) {
+			return part !== '';
+		}).map(function (part) {
+			return part + ':not([data-jsata-instance])';
+		}).join(', ');
+		return acc;
+	}, {});
 
 	var LABEL_KEYS = ['nodata', 'province', 'district', 'subdistrict', 'postalcode'];
 
@@ -39,7 +54,10 @@
 		dataKey: '',
 		dataPromise: null,
 		dataIndex: null,
+		inlineDataRef: null,
 		instanceCounter: 0,
+		instanceFields: {},
+		lastResolvedLangSlug: '',
 		eventsBound: false,
 		languagePromises: {},
 		languagesBySlug: {}
@@ -187,9 +205,8 @@
 		return [document];
 	}
 
-	function collectFieldsByType(context, type) {
-		var selector = JSATA_SELECTORS[type];
-		if (!selector) {
+	function collectFieldsBySelector(context, selector) {
+		if (typeof selector !== 'string' || selector.trim() === '') {
 			return [];
 		}
 
@@ -224,6 +241,14 @@
 		return fields;
 	}
 
+	function collectFieldsByType(context, type) {
+		var selector = JSATA_SELECTORS[type];
+		if (!selector) {
+			return [];
+		}
+		return collectFieldsBySelector(context, selector);
+	}
+
 	function getGroup(field) {
 		if (!field) {
 			return '';
@@ -247,15 +272,19 @@
 	}
 
 	function uninitializedFields(context, type) {
-		return collectFieldsByType(context, type).filter(function (field) {
-			return !field.getAttribute('data-jsata-instance');
-		});
+		var selector = JSATA_UNINITIALIZED_SELECTORS[type];
+		if (!selector) {
+			return [];
+		}
+		return collectFieldsBySelector(context, selector);
 	}
 
 	function poolByGroup(context, type) {
 		var pool = {
 			grouped: {},
-			ungrouped: []
+			groupedCursor: {},
+			ungrouped: [],
+			ungroupedCursor: 0
 		};
 
 		uninitializedFields(context, type).forEach(function (field) {
@@ -263,6 +292,7 @@
 			if (group !== '') {
 				if (!pool.grouped[group]) {
 					pool.grouped[group] = [];
+					pool.groupedCursor[group] = 0;
 				}
 				pool.grouped[group].push(field);
 			} else {
@@ -277,14 +307,21 @@
 		if (!pool.grouped[group] || pool.grouped[group].length === 0) {
 			return null;
 		}
-		return pool.grouped[group].shift();
+		var cursor = pool.groupedCursor[group] || 0;
+		if (cursor >= pool.grouped[group].length) {
+			return null;
+		}
+		pool.groupedCursor[group] = cursor + 1;
+		return pool.grouped[group][cursor];
 	}
 
 	function takeUngrouped(pool) {
-		if (pool.ungrouped.length === 0) {
+		if (pool.ungroupedCursor >= pool.ungrouped.length) {
 			return null;
 		}
-		return pool.ungrouped.shift();
+		var field = pool.ungrouped[pool.ungroupedCursor];
+		pool.ungroupedCursor += 1;
+		return field;
 	}
 
 	function discoverSets(context) {
@@ -346,14 +383,16 @@
 	}
 
 	function clearInstanceMarks(context) {
-		['province', 'district', 'subdistrict', 'postalcode'].forEach(function (type) {
-			collectFieldsByType(context, type).forEach(function (field) {
-				field.removeAttribute('data-jsata-instance');
-				field.removeAttribute('data-jsata-field');
-				field.removeAttribute('data-jsata-lang');
-				field.removeAttribute('data-jsata-name-source');
-				field.removeAttribute('data-jsata-initializing');
-			});
+		collectFieldsBySelector(context, JSATA_ALL_FIELDS_SELECTOR).forEach(function (field) {
+			var instanceId = field.getAttribute('data-jsata-instance');
+			if (instanceId) {
+				delete state.instanceFields[instanceId];
+			}
+			field.removeAttribute('data-jsata-instance');
+			field.removeAttribute('data-jsata-field');
+			field.removeAttribute('data-jsata-lang');
+			field.removeAttribute('data-jsata-name-source');
+			field.removeAttribute('data-jsata-initializing');
 		});
 	}
 
@@ -438,6 +477,37 @@
 		}
 	}
 
+	function uniqueNonEmpty(values) {
+		var unique = [];
+		var seen = {};
+		values.forEach(function (value) {
+			var normalized = normalizeValue(value);
+			if (normalized === '' || seen[normalized]) {
+				return;
+			}
+			seen[normalized] = true;
+			unique.push(normalized);
+		});
+		return unique;
+	}
+
+	function guessAddressUrls() {
+		var candidates = [];
+		var guessed = guessAddressUrl();
+		if (guessed !== '') {
+			candidates.push(guessed);
+		}
+
+		try {
+			candidates.push(new URL('address.json', window.location.href).toString());
+		} catch (err) {
+			// ignore invalid location
+		}
+
+		candidates.push('address.json');
+		return uniqueNonEmpty(candidates);
+	}
+
 	function guessLangBaseUrl() {
 		var scriptUrl = guessScriptUrl('jsata-standalone');
 		if (scriptUrl === '') {
@@ -463,21 +533,28 @@
 		}
 	}
 
-	function getAddressUrl(options) {
+	function getAddressUrls(options) {
 		var cfg = getConfig();
+		var explicit = [];
+
 		if (typeof options.addressUrl === 'string' && options.addressUrl !== '') {
-			return options.addressUrl;
+			explicit.push(options.addressUrl);
 		}
 		if (typeof options.dataUrl === 'string' && options.dataUrl !== '') {
-			return options.dataUrl;
+			explicit.push(options.dataUrl);
 		}
 		if (typeof cfg.addressUrl === 'string' && cfg.addressUrl !== '') {
-			return cfg.addressUrl;
+			explicit.push(cfg.addressUrl);
 		}
 		if (typeof cfg.dataUrl === 'string' && cfg.dataUrl !== '') {
-			return cfg.dataUrl;
+			explicit.push(cfg.dataUrl);
 		}
-		return guessAddressUrl();
+
+		if (explicit.length > 0) {
+			return uniqueNonEmpty(explicit);
+		}
+
+		return guessAddressUrls();
 	}
 
 	function normalizeLabels(input) {
@@ -537,6 +614,7 @@
 	function registerLanguagePack(pack) {
 		var normalized = parseLanguagePayload(pack, pack && pack.slug ? pack.slug : 'th');
 		state.languagesBySlug[normalized.slug] = normalized;
+		state.lastResolvedLangSlug = normalized.slug;
 		return normalized;
 	}
 
@@ -584,6 +662,25 @@
 		var byDom = detectLangFromDOM();
 		if (byDom !== '') {
 			return byDom;
+		}
+
+		return 'th';
+	}
+
+	function detectPreferredLangSlugNoDom(options) {
+		var cfg = getConfig();
+		var byOption = normalizeLangSlug(options.lang || options.language || '');
+		if (byOption !== '') {
+			return byOption;
+		}
+
+		var byConfig = normalizeLangSlug(cfg.lang || cfg.language || '');
+		if (byConfig !== '') {
+			return byConfig;
+		}
+
+		if (state.lastResolvedLangSlug !== '') {
+			return state.lastResolvedLangSlug;
 		}
 
 		return 'th';
@@ -680,6 +777,7 @@
 
 			var slug = candidates[index];
 			if (state.languagesBySlug[slug]) {
+				state.lastResolvedLangSlug = slug;
 				return Promise.resolve(state.languagesBySlug[slug]);
 			}
 
@@ -713,6 +811,34 @@
 		var aName = normalizeValue(a && a.names ? a.names[source] : '');
 		var bName = normalizeValue(b && b.names ? b.names[source] : '');
 		return aName.localeCompare(bName, source === 'th' ? 'th' : 'en');
+	}
+
+	function createOptionCache() {
+		return {
+			provinces: {
+				th: null,
+				en: null
+			},
+			districtsByProvince: {
+				th: {},
+				en: {}
+			},
+			subdistrictsByDistrict: {
+				th: {},
+				en: {}
+			},
+			postalcodesBySubdistrict: {}
+		};
+	}
+
+	function createEmptyDataIndex() {
+		return {
+			provinces: [],
+			districtsByProvince: {},
+			subdistrictsByDistrict: {},
+			postalcodesBySubdistrict: {},
+			optionCache: createOptionCache()
+		};
 	}
 
 	function buildAddressIndex(raw) {
@@ -800,7 +926,8 @@
 			provinces: provinces,
 			districtsByProvince: districtsByProvince,
 			subdistrictsByDistrict: subdistrictsByDistrict,
-			postalcodesBySubdistrict: postalcodesBySubdistrict
+			postalcodesBySubdistrict: postalcodesBySubdistrict,
+			optionCache: createOptionCache()
 		};
 	}
 
@@ -810,17 +937,19 @@
 
 		if (inlineData) {
 			var inlineKey = 'inline';
-			if (state.dataIndex && state.dataKey === inlineKey) {
+			if (state.dataIndex && state.dataKey === inlineKey && state.inlineDataRef === inlineData) {
 				return Promise.resolve(state.dataIndex);
 			}
 			state.dataKey = inlineKey;
+			state.inlineDataRef = inlineData;
 			state.dataIndex = buildAddressIndex(inlineData);
 			state.dataPromise = null;
 			return Promise.resolve(state.dataIndex);
 		}
 
-		var dataUrl = getAddressUrl(options);
-		var urlKey = 'url:' + dataUrl;
+		state.inlineDataRef = null;
+		var dataUrls = getAddressUrls(options);
+		var urlKey = 'url:' + dataUrls.join('|');
 
 		if (state.dataIndex && state.dataKey === urlKey) {
 			return Promise.resolve(state.dataIndex);
@@ -831,19 +960,26 @@
 		}
 
 		state.dataKey = urlKey;
-		state.dataPromise = fetchJson(dataUrl)
-			.then(function (json) {
-				state.dataIndex = buildAddressIndex(json);
-				return state.dataIndex;
-			})
+		function tryLoadByCandidate(index) {
+			if (index >= dataUrls.length) {
+				return Promise.reject(new Error('Failed to load address data from all candidates.'));
+			}
+
+			return fetchJson(dataUrls[index])
+				.then(function (json) {
+					state.dataIndex = buildAddressIndex(json);
+					return state.dataIndex;
+				})
+				.catch(function () {
+					return tryLoadByCandidate(index + 1);
+				});
+		}
+
+		state.dataPromise = tryLoadByCandidate(0)
 			.catch(function (error) {
-				console.error('[JSATA] ' + error.message);
-				state.dataIndex = {
-					provinces: [],
-					districtsByProvince: {},
-					subdistrictsByDistrict: {},
-					postalcodesBySubdistrict: {}
-				};
+				var fallbackHint = dataUrls.length > 0 ? ' Tried: ' + dataUrls.join(', ') : '';
+				console.error('[JSATA] ' + error.message + fallbackHint);
+				state.dataIndex = createEmptyDataIndex();
 				return state.dataIndex;
 			})
 			.finally(function () {
@@ -854,44 +990,65 @@
 	}
 
 	function getOptionsByLevel(dataIndex, locale, level, ids) {
+		if (!dataIndex) {
+			return [];
+		}
+
 		var source = locale.nameSource === 'en' ? 'en' : 'th';
+		if (!dataIndex.optionCache) {
+			dataIndex.optionCache = createOptionCache();
+		}
+		var optionCache = dataIndex.optionCache;
 
 		if (level === 'province') {
-			var provinces = dataIndex.provinces.slice().sort(function (a, b) {
-				return compareByNameSource(a, b, source);
-			});
-			return provinces.map(function (row) {
-				return { value: row.id, label: row.names[source] || row.names.th || row.id };
-			});
+			if (!optionCache.provinces[source]) {
+				var provinces = dataIndex.provinces.slice().sort(function (a, b) {
+					return compareByNameSource(a, b, source);
+				});
+				optionCache.provinces[source] = provinces.map(function (row) {
+					return { value: row.id, label: row.names[source] || row.names.th || row.id };
+				});
+			}
+			return optionCache.provinces[source];
 		}
 
 		if (level === 'district') {
-			var districts = dataIndex.districtsByProvince[normalizeValue(ids.pvId)] || [];
-			districts = districts.slice().sort(function (a, b) {
-				return compareByNameSource(a, b, source);
-			});
-			return districts.map(function (row) {
-				return { value: row.id, label: row.names[source] || row.names.th || row.id };
-			});
+			var pvId = normalizeValue(ids.pvId);
+			if (!optionCache.districtsByProvince[source][pvId]) {
+				var districts = dataIndex.districtsByProvince[pvId] || [];
+				districts = districts.slice().sort(function (a, b) {
+					return compareByNameSource(a, b, source);
+				});
+				optionCache.districtsByProvince[source][pvId] = districts.map(function (row) {
+					return { value: row.id, label: row.names[source] || row.names.th || row.id };
+				});
+			}
+			return optionCache.districtsByProvince[source][pvId];
 		}
 
 		if (level === 'subdistrict') {
 			var key = normalizeValue(ids.pvId) + ':' + normalizeValue(ids.dtId);
-			var subdistricts = dataIndex.subdistrictsByDistrict[key] || [];
-			subdistricts = subdistricts.slice().sort(function (a, b) {
-				return compareByNameSource(a, b, source);
-			});
-			return subdistricts.map(function (row) {
-				return { value: row.id, label: row.names[source] || row.names.th || row.id };
-			});
+			if (!optionCache.subdistrictsByDistrict[source][key]) {
+				var subdistricts = dataIndex.subdistrictsByDistrict[key] || [];
+				subdistricts = subdistricts.slice().sort(function (a, b) {
+					return compareByNameSource(a, b, source);
+				});
+				optionCache.subdistrictsByDistrict[source][key] = subdistricts.map(function (row) {
+					return { value: row.id, label: row.names[source] || row.names.th || row.id };
+				});
+			}
+			return optionCache.subdistrictsByDistrict[source][key];
 		}
 
 		if (level === 'postalcode') {
 			var postalKey = normalizeValue(ids.pvId) + ':' + normalizeValue(ids.dtId) + ':' + normalizeValue(ids.sdtId);
-			var postalcodes = dataIndex.postalcodesBySubdistrict[postalKey] || [];
-			return postalcodes.map(function (row) {
-				return { value: row.value, label: row.label };
-			});
+			if (!Object.prototype.hasOwnProperty.call(optionCache.postalcodesBySubdistrict, postalKey)) {
+				var postalcodes = dataIndex.postalcodesBySubdistrict[postalKey] || [];
+				optionCache.postalcodesBySubdistrict[postalKey] = postalcodes.map(function (row) {
+					return { value: row.value, label: row.label };
+				});
+			}
+			return optionCache.postalcodesBySubdistrict[postalKey];
 		}
 
 		return [];
@@ -903,17 +1060,19 @@
 		}
 
 		field.innerHTML = '';
+		var fragment = document.createDocumentFragment();
 		var placeholder = document.createElement('option');
 		placeholder.value = '';
 		placeholder.textContent = list.length > 0 ? labelOf(locale, level) : labelOf(locale, 'nodata');
-		field.appendChild(placeholder);
+		fragment.appendChild(placeholder);
 
 		list.forEach(function (item) {
 			var option = document.createElement('option');
 			option.value = normalizeValue(item.value);
 			option.textContent = normalizeValue(item.label);
-			field.appendChild(option);
+			fragment.appendChild(option);
 		});
+		field.appendChild(fragment);
 
 		field.disabled = false;
 		var applied = applyValue(field, selectedValue);
@@ -953,14 +1112,32 @@
 			return null;
 		}
 
+		var cached = state.instanceFields[instanceId];
+		if (
+			cached &&
+			cached.province &&
+			cached.province.isConnected !== false &&
+			cached.province.getAttribute('data-jsata-instance') === instanceId
+		) {
+			return cached;
+		}
+		if (cached) {
+			delete state.instanceFields[instanceId];
+		}
+
 		var selector = '[data-jsata-instance="' + String(instanceId).replace(/"/g, '\\"') + '"]';
-		return {
+		var fields = {
 			instanceId: instanceId,
 			province: document.querySelector(selector + '[data-jsata-field="province"]'),
 			district: document.querySelector(selector + '[data-jsata-field="district"]'),
 			subdistrict: document.querySelector(selector + '[data-jsata-field="subdistrict"]'),
 			postalcode: document.querySelector(selector + '[data-jsata-field="postalcode"]')
 		};
+		if (!fields.province) {
+			return null;
+		}
+		state.instanceFields[instanceId] = fields;
+		return fields;
 	}
 
 	function initializeSet(dataIndex, set, locale) {
@@ -974,6 +1151,13 @@
 		markField(set.district, instanceId, 'district', locale);
 		markField(set.subdistrict, instanceId, 'subdistrict', locale);
 		markField(set.postalcode, instanceId, 'postalcode', locale);
+		state.instanceFields[instanceId] = {
+			instanceId: instanceId,
+			province: set.province || null,
+			district: set.district || null,
+			subdistrict: set.subdistrict || null,
+			postalcode: set.postalcode || null
+		};
 
 		setInitializingFlag(set, true);
 
@@ -1142,6 +1326,23 @@
 				return;
 			}
 
+			var initializedFieldType = target.getAttribute('data-jsata-field');
+			var initializedInstanceId = target.getAttribute('data-jsata-instance');
+			if (initializedInstanceId) {
+				if (initializedFieldType === 'province') {
+					handleProvinceChange(target);
+					return;
+				}
+				if (initializedFieldType === 'district') {
+					handleDistrictChange(target);
+					return;
+				}
+				if (initializedFieldType === 'subdistrict') {
+					handleSubdistrictChange(target);
+					return;
+				}
+			}
+
 			if (target.matches(JSATA_SELECTORS.province)) {
 				handleProvinceChange(target);
 				return;
@@ -1159,6 +1360,21 @@
 	function initInternal(context, options) {
 		var initOptions = asObject(options);
 		var shouldReinitialize = initOptions.reinitialize === true || initOptions.forceReinitialize === true;
+		var initContext = context || document;
+
+		if (shouldReinitialize) {
+			clearInstanceMarks(initContext);
+		}
+
+		var sets = discoverSets(initContext);
+		if (sets.length === 0) {
+			return Promise.resolve({
+				sets: 0,
+				lang: detectPreferredLangSlugNoDom(initOptions)
+			});
+		}
+
+		bindEventsOnce();
 
 		return Promise.all([
 			ensureAddressDataLoaded(initOptions),
@@ -1167,13 +1383,6 @@
 			var dataIndex = resolved[0];
 			var locale = resolved[1];
 
-			bindEventsOnce();
-
-			if (shouldReinitialize) {
-				clearInstanceMarks(context);
-			}
-
-			var sets = discoverSets(context || document);
 			sets.forEach(function (set) {
 				initializeSet(dataIndex, set, locale);
 			});
