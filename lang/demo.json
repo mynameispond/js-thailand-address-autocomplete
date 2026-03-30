@@ -1,0 +1,11 @@
+{
+  "slug": "demo",
+  "nameSource": "en",
+  "labels": {
+    "nodata": "No result",
+    "province": "Province (Demo)",
+    "district": "District (Demo)",
+    "subdistrict": "Subdistrict (Demo)",
+    "postalcode": "Zip code (Demo)"
+  }
+}

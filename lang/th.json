@@ -1,0 +1,11 @@
+{
+  "slug": "th",
+  "nameSource": "th",
+  "labels": {
+    "nodata": "ไม่พบข้อมูล",
+    "province": "เลือกจังหวัด",
+    "district": "เลือกอำเภอ/เขต",
+    "subdistrict": "เลือกตำบล/แขวง",
+    "postalcode": "เลือกรหัสไปรษณีย์"
+  }
+}

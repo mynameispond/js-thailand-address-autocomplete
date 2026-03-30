@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JSATA Example 02 - Default Value & Language</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+    .panel { border: 1px solid #d1d5db; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    button { cursor: pointer; border: 1px solid #9ca3af; background: #fff; border-radius: 8px; padding: 8px 12px; }
+    .row { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+    label { display: block; margin-bottom: 6px; font-size: 13px; }
+    select { width: 100%; min-height: 36px; }
+    #status { margin-bottom: 10px; color: #374151; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
+    @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Example 02: Default Value + Language Switching</h1>
+
+  <div class="panel">
+    <p><strong>เคสที่ครอบคลุมในหน้านี้</strong></p>
+    <ul>
+      <li>ตั้งค่า default value ด้วย <code>data-jsata-value</code></li>
+      <li>สลับภาษาในตอน init ด้วย <code>jsataInit(..., { lang: "..." })</code></li>
+      <li>บังคับ render ใหม่ด้วย <code>reinitialize: true</code></li>
+      <li>โหลดภาษา custom จาก slug ไฟล์ เช่น <code>lib/lang/demo.json</code></li>
+    </ul>
+  </div>
+
+  <div class="toolbar">
+    <button type="button" data-lang="th">ภาษาไทย (th)</button>
+    <button type="button" data-lang="en">English (en)</button>
+    <button type="button" data-lang="demo">Demo language (demo)</button>
+  </div>
+  <div id="status">พร้อมใช้งาน</div>
+
+  <div id="address-form" class="panel jsata-group-customer">
+    <h2>Customer Address</h2>
+    <div class="row">
+      <div>
+        <label>จังหวัด</label>
+        <select class="jsata-select-province" data-jsata-value="10"></select>
+      </div>
+      <div>
+        <label>อำเภอ/เขต</label>
+        <select class="jsata-select-district" data-jsata-value="1001"></select>
+      </div>
+      <div>
+        <label>ตำบล/แขวง</label>
+        <select class="jsata-select-subdistrict" data-jsata-value="100101"></select>
+      </div>
+      <div>
+        <label>รหัสไปรษณีย์</label>
+        <select class="jsata-select-postalcode" data-jsata-value="10200"></select>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.jsataConfig = {
+      autoInit: false,
+      addressUrl: "../../address.json"
+    };
+  </script>
+  <script src="../jsata-standalone.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var statusNode = document.getElementById("status");
+
+      function setStatus(text) {
+        statusNode.textContent = text;
+      }
+
+      function applyLanguage(slug) {
+        setStatus("กำลังโหลดภาษา: " + slug + " ...");
+        window.jsataInit("#address-form", { lang: slug, reinitialize: true })
+          .then(function (result) {
+            setStatus("ภาษา " + result.lang + " | reinitialized sets: " + result.sets);
+          })
+          .catch(function (error) {
+            setStatus("เกิดข้อผิดพลาด: " + (error && error.message ? error.message : error));
+          });
+      }
+
+      document.querySelectorAll("button[data-lang]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          applyLanguage(button.getAttribute("data-lang"));
+        });
+      });
+
+      applyLanguage("th");
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "slug": "en",
+  "nameSource": "en",
+  "labels": {
+    "nodata": "No data",
+    "province": "Select province",
+    "district": "Select district",
+    "subdistrict": "Select subdistrict",
+    "postalcode": "Select postal code"
+  }
+}

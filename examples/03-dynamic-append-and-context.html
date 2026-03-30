@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JSATA Example 03 - Dynamic Append & Context</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+    .help { border: 1px solid #c7d2fe; background: #eef2ff; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    button { cursor: pointer; border: 1px solid #9ca3af; background: #fff; border-radius: 8px; padding: 8px 12px; }
+    #status { margin-bottom: 10px; color: #374151; }
+    .set { border: 1px solid #d1d5db; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+    .set h3 { margin: 0 0 10px; font-size: 16px; }
+    .row { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+    label { display: block; margin-bottom: 6px; font-size: 13px; }
+    select { width: 100%; min-height: 36px; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
+    @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Example 03: Dynamic Append + Init Context</h1>
+
+  <div class="help">
+    <p><strong>เคสที่รองรับ</strong></p>
+    <ul>
+      <li>append ทีละชุด แล้ว init ด้วย selector</li>
+      <li>append หลายชุดพร้อมกันจาก JSON แล้ว init เฉพาะ node ใหม่</li>
+      <li>เรียก init ด้วย context หลายแบบ: <code>#id</code>, <code>.class</code>, DOM, NodeList, jQuery object</li>
+    </ul>
+  </div>
+
+  <div class="toolbar">
+    <button type="button" id="btn-append-one-no-group">Append 1 ชุด (ไม่ใส่ group)</button>
+    <button type="button" id="btn-append-many-json">Append หลายชุดจาก JSON</button>
+    <button type="button" id="btn-init-id">Init by #sets-container</button>
+    <button type="button" id="btn-init-class">Init by .set</button>
+    <button type="button" id="btn-init-dom">Init by DOM element</button>
+    <button type="button" id="btn-init-nodelist">Init by NodeList</button>
+    <button type="button" id="btn-init-jquery">Init by jQuery object</button>
+  </div>
+
+  <div id="status">Ready</div>
+  <div id="sets-container"></div>
+
+  <template id="set-template">
+    <div class="set __GROUP_CLASS__">
+      <h3>__TITLE__</h3>
+      <div class="row">
+        <div><label>จังหวัด</label><select class="jsata-select-province" data-jsata-value="__PV__"></select></div>
+        <div><label>อำเภอ/เขต</label><select class="jsata-select-district" data-jsata-value="__DT__"></select></div>
+        <div><label>ตำบล/แขวง</label><select class="jsata-select-subdistrict" data-jsata-value="__SDT__"></select></div>
+        <div><label>รหัสไปรษณีย์</label><select class="jsata-select-postalcode" data-jsata-value="__PTC__"></select></div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    window.jsataConfig = {
+      addressUrl: "../../address.json",
+      lang: "th"
+    };
+  </script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js" crossorigin="anonymous"></script>
+  <script src="../jsata-standalone.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var counter = 0;
+      var statusNode = document.getElementById("status");
+      var container = document.getElementById("sets-container");
+      var templateHtml = document.getElementById("set-template").innerHTML;
+
+      function text(value) {
+        return value === undefined || value === null ? "" : String(value);
+      }
+
+      function status(message) {
+        statusNode.textContent = message;
+      }
+
+      function renderSet(item) {
+        counter += 1;
+        var defaults = item.defaults || {};
+        var useGroup = item.useGroup !== false;
+        var groupClass = useGroup ? ("jsata-group-" + text(item.group || ("set-" + counter))) : "";
+        return templateHtml
+          .replace(/__GROUP_CLASS__/g, groupClass)
+          .replace(/__TITLE__/g, text(item.title || ("Address Set " + counter)))
+          .replace(/__PV__/g, text(defaults.province))
+          .replace(/__DT__/g, text(defaults.district))
+          .replace(/__SDT__/g, text(defaults.subdistrict))
+          .replace(/__PTC__/g, text(defaults.postalcode));
+      }
+
+      function appendAndInit(html, context, label) {
+        var wrap = document.createElement("div");
+        wrap.innerHTML = html;
+        var nodes = Array.prototype.slice.call(wrap.children);
+        nodes.forEach(function (node) {
+          container.appendChild(node);
+        });
+
+        window.jsataInit(context).then(function (result) {
+          status("Initialized by " + label + " | sets=" + result.sets + " | lang=" + result.lang);
+        });
+      }
+
+      document.getElementById("btn-append-one-no-group").addEventListener("click", function () {
+        var html = renderSet({
+          title: "Single append without group",
+          useGroup: false,
+          defaults: {}
+        });
+        appendAndInit(html, "#sets-container", "#sets-container");
+      });
+
+      document.getElementById("btn-append-many-json").addEventListener("click", function () {
+        status("Loading JSON ...");
+        fetch("./data/address-sets.json")
+          .then(function (res) { return res.json(); })
+          .then(function (rows) {
+            var html = rows.map(renderSet).join("");
+            var wrap = document.createElement("div");
+            wrap.innerHTML = html;
+            var nodes = Array.prototype.slice.call(wrap.children);
+            nodes.forEach(function (node) {
+              container.appendChild(node);
+            });
+            return window.jsataInit(nodes, { lang: "th" });
+          })
+          .then(function (result) {
+            status("Appended many sets by JSON | sets=" + result.sets + " | lang=" + result.lang);
+          })
+          .catch(function (error) {
+            status("Failed: " + (error && error.message ? error.message : error));
+          });
+      });
+
+      document.getElementById("btn-init-id").addEventListener("click", function () {
+        window.jsataInit("#sets-container").then(function () {
+          status("Init by #sets-container");
+        });
+      });
+
+      document.getElementById("btn-init-class").addEventListener("click", function () {
+        window.jsataInit(".set").then(function () {
+          status("Init by .set");
+        });
+      });
+
+      document.getElementById("btn-init-dom").addEventListener("click", function () {
+        window.jsataInit(container).then(function () {
+          status("Init by DOM element");
+        });
+      });
+
+      document.getElementById("btn-init-nodelist").addEventListener("click", function () {
+        var list = document.querySelectorAll(".set");
+        window.jsataInit(list).then(function () {
+          status("Init by NodeList");
+        });
+      });
+
+      document.getElementById("btn-init-jquery").addEventListener("click", function () {
+        var $nodes = window.jQuery(".set");
+        window.jsataInit($nodes).then(function () {
+          status("Init by jQuery object");
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

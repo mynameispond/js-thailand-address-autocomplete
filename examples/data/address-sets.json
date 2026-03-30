@@ -1,0 +1,27 @@
+[
+  {
+    "title": "Shipping Set",
+    "group": "shipping-a",
+    "defaults": {
+      "province": "10",
+      "district": "1001",
+      "subdistrict": "100101",
+      "postalcode": "10200"
+    }
+  },
+  {
+    "title": "Billing Set",
+    "group": "billing-b",
+    "defaults": {
+      "province": "10",
+      "district": "1002",
+      "subdistrict": "100201",
+      "postalcode": "10300"
+    }
+  },
+  {
+    "title": "Empty Set",
+    "group": "empty-c",
+    "defaults": {}
+  }
+]

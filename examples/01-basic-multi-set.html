@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JSATA Example 01 - Basic Multi Set</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+    .note { padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #f8fafc; margin-bottom: 16px; }
+    .address-set { border: 1px solid #d1d5db; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+    .address-set h2 { margin: 0 0 12px; font-size: 18px; }
+    .row { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+    label { display: block; margin-bottom: 6px; font-size: 13px; }
+    select { width: 100%; min-height: 36px; }
+    @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Example 01: Basic Multi Set</h1>
+  <div class="note">
+    ตัวอย่างนี้แสดงการใช้งานหลายชุดในหน้าเดียว โดยใช้ <code>jsata-group-*</code> แยกแต่ละชุด
+  </div>
+
+  <div class="address-set jsata-group-shipping">
+    <h2>Shipping Address</h2>
+    <div class="row">
+      <div><label>จังหวัด</label><select class="jsata-select-province"></select></div>
+      <div><label>อำเภอ/เขต</label><select class="jsata-select-district"></select></div>
+      <div><label>ตำบล/แขวง</label><select class="jsata-select-subdistrict"></select></div>
+      <div><label>รหัสไปรษณีย์</label><select class="jsata-select-postalcode"></select></div>
+    </div>
+  </div>
+
+  <div class="address-set jsata-group-billing">
+    <h2>Billing Address</h2>
+    <div class="row">
+      <div><label>จังหวัด</label><select class="jsata-select-province"></select></div>
+      <div><label>อำเภอ/เขต</label><select class="jsata-select-district"></select></div>
+      <div><label>ตำบล/แขวง</label><select class="jsata-select-subdistrict"></select></div>
+      <div><label>รหัสไปรษณีย์</label><select class="jsata-select-postalcode"></select></div>
+    </div>
+  </div>
+
+  <script>
+    window.jsataConfig = {
+      addressUrl: "../../address.json",
+      lang: "th"
+    };
+  </script>
+  <script src="../jsata-standalone.js"></script>
+</body>
+</html>
