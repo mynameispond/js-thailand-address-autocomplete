@@ -131,6 +131,7 @@ window.jsataInit(newContext);
 - DOM element
 - `NodeList`
 - jQuery object
+- `ShadowRoot` (สำหรับ Web Components / Shadow DOM)
 
 ตัวอย่าง:
 
