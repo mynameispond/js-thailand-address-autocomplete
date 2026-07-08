@@ -155,6 +155,10 @@
 			return true;
 		}
 
+		if (window.jQuery && value instanceof window.jQuery) {
+			return true;
+		}
+
 		return !!(value.nodeType === 1 || value.nodeType === 9 || typeof value === 'string' || Array.isArray(value));
 	}
 
@@ -283,8 +287,7 @@
 		var pool = {
 			grouped: {},
 			groupedCursor: {},
-			ungrouped: [],
-			ungroupedCursor: 0
+			ungrouped: []
 		};
 
 		uninitializedFields(context, type).forEach(function (field) {
@@ -316,12 +319,49 @@
 	}
 
 	function takeUngrouped(pool) {
-		if (pool.ungroupedCursor >= pool.ungrouped.length) {
+		if (!pool.ungrouped || pool.ungrouped.length === 0) {
 			return null;
 		}
-		var field = pool.ungrouped[pool.ungroupedCursor];
-		pool.ungroupedCursor += 1;
-		return field;
+		return pool.ungrouped.shift();
+	}
+
+	function findHighestSafeAncestor(provinceField, context) {
+		var current = provinceField.parentElement;
+		var highest = provinceField;
+		var roots = contextToElements(context);
+
+		while (current) {
+			var isRootOrAbove = false;
+			for (var i = 0; i < roots.length; i++) {
+				if (current === roots[i] || (typeof roots[i].contains === 'function' && roots[i].contains(current))) {
+					isRootOrAbove = true;
+					break;
+				}
+			}
+
+			var provincesInCurrent = current.querySelectorAll(JSATA_SELECTORS.province);
+			if (provincesInCurrent.length > 1) {
+				break;
+			}
+
+			highest = current;
+			if (isRootOrAbove) {
+				break;
+			}
+			current = current.parentElement;
+		}
+		return highest;
+	}
+
+	function takeFromPool(pool, container) {
+		for (var i = 0; i < pool.ungrouped.length; i++) {
+			var field = pool.ungrouped[i];
+			if (field && container.contains(field)) {
+				pool.ungrouped.splice(i, 1);
+				return field;
+			}
+		}
+		return null;
 	}
 
 	function discoverSets(context) {
@@ -373,9 +413,16 @@
 				set.subdistrict = takeGrouped(subdistrictPool, set.group);
 				set.postalcode = takeGrouped(postalcodePool, set.group);
 			} else {
-				set.district = takeUngrouped(districtPool);
-				set.subdistrict = takeUngrouped(subdistrictPool);
-				set.postalcode = takeUngrouped(postalcodePool);
+				var safeAncestor = findHighestSafeAncestor(set.province, context);
+				if (safeAncestor !== set.province) {
+					set.district = takeFromPool(districtPool, safeAncestor);
+					set.subdistrict = takeFromPool(subdistrictPool, safeAncestor);
+					set.postalcode = takeFromPool(postalcodePool, safeAncestor);
+				} else {
+					set.district = takeUngrouped(districtPool);
+					set.subdistrict = takeUngrouped(subdistrictPool);
+					set.postalcode = takeUngrouped(postalcodePool);
+				}
 			}
 		});
 
