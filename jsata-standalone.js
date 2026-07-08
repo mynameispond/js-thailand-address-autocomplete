@@ -159,7 +159,7 @@
 			return true;
 		}
 
-		return !!(value.nodeType === 1 || value.nodeType === 9 || typeof value === 'string' || Array.isArray(value));
+		return !!(value.nodeType === 1 || value.nodeType === 9 || value.nodeType === 11 || typeof value === 'string' || Array.isArray(value));
 	}
 
 	function resolveInitArguments(arg1, arg2) {
@@ -202,7 +202,7 @@
 			return Array.prototype.slice.call(context);
 		}
 
-		if (context.nodeType === 1 || context.nodeType === 9) {
+		if (context.nodeType === 1 || context.nodeType === 9 || context.nodeType === 11) {
 			return [context];
 		}
 
@@ -1154,7 +1154,7 @@
 		return fallback;
 	}
 
-	function getInstanceFields(instanceId) {
+	function getInstanceFields(instanceId, referenceElement) {
 		if (!instanceId) {
 			return null;
 		}
@@ -1172,13 +1172,21 @@
 			delete state.instanceFields[instanceId];
 		}
 
+		var root = document;
+		if (referenceElement && typeof referenceElement.getRootNode === 'function') {
+			var elementRoot = referenceElement.getRootNode();
+			if (elementRoot.nodeType === 9 || elementRoot.nodeType === 11) {
+				root = elementRoot;
+			}
+		}
+
 		var selector = '[data-jsata-instance="' + String(instanceId).replace(/"/g, '\\"') + '"]';
 		var fields = {
 			instanceId: instanceId,
-			province: document.querySelector(selector + '[data-jsata-field="province"]'),
-			district: document.querySelector(selector + '[data-jsata-field="district"]'),
-			subdistrict: document.querySelector(selector + '[data-jsata-field="subdistrict"]'),
-			postalcode: document.querySelector(selector + '[data-jsata-field="postalcode"]')
+			province: root.querySelector(selector + '[data-jsata-field="province"]'),
+			district: root.querySelector(selector + '[data-jsata-field="district"]'),
+			subdistrict: root.querySelector(selector + '[data-jsata-field="subdistrict"]'),
+			postalcode: root.querySelector(selector + '[data-jsata-field="postalcode"]')
 		};
 		if (!fields.province) {
 			return null;
@@ -1273,7 +1281,7 @@
 			return;
 		}
 
-		var fields = getInstanceFields(field.getAttribute('data-jsata-instance'));
+		var fields = getInstanceFields(field.getAttribute('data-jsata-instance'), field);
 		if (!fields) {
 			return;
 		}
@@ -1302,7 +1310,7 @@
 			return;
 		}
 
-		var fields = getInstanceFields(field.getAttribute('data-jsata-instance'));
+		var fields = getInstanceFields(field.getAttribute('data-jsata-instance'), field);
 		if (!fields) {
 			return;
 		}
@@ -1334,7 +1342,7 @@
 			return;
 		}
 
-		var fields = getInstanceFields(field.getAttribute('data-jsata-instance'));
+		var fields = getInstanceFields(field.getAttribute('data-jsata-instance'), field);
 		if (!fields) {
 			return;
 		}
@@ -1368,7 +1376,8 @@
 		state.eventsBound = true;
 
 		document.addEventListener('change', function (event) {
-			var target = event.target;
+			var path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+			var target = path[0] || event.target;
 			if (!target || !target.matches) {
 				return;
 			}
